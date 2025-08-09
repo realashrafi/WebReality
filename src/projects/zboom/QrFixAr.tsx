@@ -9,11 +9,10 @@ const ContentManager = {
             const response = await fetch(qrData); // مثلاً https://jsonplaceholder.typicode.com/posts/1
             if (!response.ok) throw new Error('خطا در دریافت داده از API');
             const data = await response.json();
-            // تبدیل داده به کارت معلق
             return {
                 type: 'aframe',
                 content: `
-          <a-plane position="0 0.5 0" width="2" height="1" material="color: #f0f0f0; opacity: 0.9">
+          <a-plane position="0 0.5 0" width="2" height="1" material="color: #f0f0f0; opacity: 0.9" animation="property: position; from: 0 1 0; to: 0 0.5 0; dur: 500; easing: easeOutQuad">
             <a-text value="${data.title}\n${data.body}" color="black" align="center" width="1.8" wrap-count="30"></a-text>
           </a-plane>
         `,
@@ -37,15 +36,24 @@ const ARIntegrated = () => {
         const canvas = canvasRef.current;
         const ctx = canvas.getContext('2d');
         let scanInterval = null;
+        let stream = null;
 
         const startCamera = async () => {
             try {
-                const stream = await navigator.mediaDevices.getUserMedia({
-                    video: { facingMode: 'environment' },
-                });
-                video.srcObject = stream;
-                video.play();
-                startScanning();
+                // فقط اگه استریم وجود نداشته باشه، درخواست جدید بده
+                if (!stream) {
+                    stream = await navigator.mediaDevices.getUserMedia({
+                        video: { facingMode: 'environment' },
+                    });
+                    video.srcObject = stream;
+                    // صبر کن تا متادیتای ویدیو لود بشه قبل از play
+                    video.onloadedmetadata = () => {
+                        video.play().catch((err) => {
+                            setError('خطا در پخش ویدیو: ' + err.message);
+                        });
+                        startScanning();
+                    };
+                }
             } catch (err) {
                 setError('خطا در دسترسی به دوربین: ' + err.message);
             }
@@ -93,7 +101,6 @@ const ARIntegrated = () => {
 
         return () => {
             clearInterval(scanInterval);
-            const stream = video.srcObject;
             if (stream) {
                 stream.getTracks().forEach((track) => track.stop());
             }
@@ -120,7 +127,7 @@ const ARIntegrated = () => {
                     </a-marker>
                     <a-entity camera></a-entity>
                 </a-scene>
-                <video ref={videoRef} className="hidden" />
+                <video ref={videoRef} className="hidden" muted playsInline />
                 <canvas ref={canvasRef} className="hidden" />
                 {loading && (
                     <motion.div
